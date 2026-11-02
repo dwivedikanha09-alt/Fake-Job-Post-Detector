@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fake Job Posting Detector</title>
+<style>
+  :root {
+    --bg: #f5f6fa; --card: #ffffff; --text: #1d2433; --muted: #6b7385;
+    --border: #d9dde7; --accent: #3558e6; --accent-text: #ffffff;
+    --ok: #138a4b; --ok-bg: #e3f6ec; --bad: #c62828; --bad-bg: #fde8e8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151c; --card: #1b2030; --text: #e8ebf3; --muted: #9aa3b8;
+      --border: #2c3348; --accent: #6b8bff; --accent-text: #0e1220;
+      --ok: #5fd397; --ok-bg: #16322a; --bad: #ff8a8a; --bad-bg: #3a1c1f;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px 16px; background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; line-height: 1.5;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  form, #result { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 20px; }
+  label { display: block; font-weight: 600; font-size: .9rem; margin: 14px 0 6px; }
+  input[type=text], textarea, select {
+    width: 100%; padding: 10px 12px; font: inherit; color: var(--text);
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+  }
+  textarea { min-height: 96px; resize: vertical; }
+  input:focus, textarea:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0 16px; }
+  .checks { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-top: 16px; }
+  .checks label { display: flex; align-items: center; gap: 8px; margin: 0; font-weight: 500; }
+  .btns { display: flex; gap: 10px; margin-top: 20px; }
+  button {
+    font: inherit; font-weight: 600; padding: 10px 20px; border-radius: 8px; cursor: pointer;
+    border: 1px solid var(--border); background: transparent; color: var(--text);
+  }
+  button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+  button:disabled { opacity: .6; cursor: wait; }
+  #result { margin-top: 20px; display: none; }
+  #result.show { display: block; }
+  .badge { display: inline-block; padding: 6px 14px; border-radius: 999px; font-weight: 700; }
+  .badge.fake { background: var(--bad-bg); color: var(--bad); }
+  .badge.real { background: var(--ok-bg); color: var(--ok); }
+  .bar { height: 10px; background: var(--border); border-radius: 999px; margin: 14px 0 6px; overflow: hidden; }
+  .bar span { display: block; height: 100%; width: 0; background: var(--bad); transition: width .5s ease; }
+  .err { color: var(--bad); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Fake Job Posting Detector</h1>
+  <p class="sub">Job posting ki details bharo aur model batayega ki posting real hai ya fake.</p>
+
+  <form id="form">
+    <label for="title">Job Title</label>
+    <input type="text" id="title" required placeholder="e.g. Data Entry Executive">
+
+    <label for="company_profile">Company Profile</label>
+    <textarea id="company_profile" placeholder="Company ke baare me..."></textarea>
+
+    <label for="description">Job Description</label>
+    <textarea id="description" required placeholder="Kaam ki details..."></textarea>
+
+    <label for="requirements">Requirements</label>
+    <textarea id="requirements" placeholder="Skills, qualification..."></textarea>
+
+    <div class="row">
+      <div>
+        <label for="employment_type">Employment Type</label>
+        <select id="employment_type">
+          <option>Unknown</option><option>Full-time</option><option>Part-time</option>
+          <option>Contract</option><option>Temporary</option><option>Other</option>
+        </select>
+      </div>
+      <div>
+        <label for="required_experience">Required Experience</label>
+        <select id="required_experience">
+          <option>Unknown</option><option>Internship</option><option>Entry level</option>
+          <option>Associate</option><option>Mid-Senior level</option><option>Director</option>
+          <option>Executive</option><option>Not Applicable</option>
+        </select>
+      </div>
+      <div>
+        <label for="required_education">Required Education</label>
+        <select id="required_education">
+          <option>Unknown</option><option>Unspecified</option><option>High School or equivalent</option>
+          <option>Some High School Coursework</option><option>Vocational</option>
+          <option>Vocational - HS Diploma</option><option>Vocational - Degree</option>
+          <option>Certification</option><option>Some College Coursework Completed</option>
+          <option>Associate Degree</option><option>Bachelor's Degree</option>
+          <option>Master's Degree</option><option>Professional</option><option>Doctorate</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="checks">
+      <label><input type="checkbox" id="telecommuting"> Remote / Telecommuting</label>
+      <label><input type="checkbox" id="has_company_logo"> Company logo hai</label>
+      <label><input type="checkbox" id="has_questions"> Screening questions hain</label>
+    </div>
+
+    <div class="btns">
+      <button type="submit" class="primary" id="submitBtn">Check Posting</button>
+      <button type="reset" id="resetBtn">Reset</button>
+    </div>
+  </form>
+
+  <div id="result" aria-live="polite"></div>
+</div>
+
+<script>
+  // Flask backend ka URL (same server se serve ho raha ho to "/predict" kaafi hai)
+  const API_URL = "/predict";
+
+  const form = document.getElementById("form");
+  const result = document.getElementById("result");
+  const btn = document.getElementById("submitBtn");
+  const val = id => document.getElementById(id).value.trim();
+  const flag = id => (document.getElementById(id).checked ? 1 : 0);
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const payload = {
+      title: val("title"),
+      company_profile: val("company_profile"),
+      description: val("description"),
+      requirements: val("requirements"),
+      employment_type: val("employment_type"),
+      required_experience: val("required_experience"),
+      required_education: val("required_education"),
+      telecommuting: flag("telecommuting"),
+      has_company_logo: flag("has_company_logo"),
+      has_questions: flag("has_questions"),
+    };
+
+    btn.disabled = true;
+    btn.textContent = "Checking...";
+    try {
+      const res = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error("Server error " + res.status);
+      showResult(await res.json());
+    } catch (err) {
+      result.className = "show";
+      result.innerHTML = '<span class="err">Prediction fail ho gayi: ' + err.message +
+        '. Check karo ki Flask server chal raha hai.</span>';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Check Posting";
+    }
+  });
+
+  document.getElementById("resetBtn").addEventListener("click", () => {
+    result.className = "";
+    result.innerHTML = "";
+  });
+
+  function showResult(data) {
+    const fake = Number(data.prediction) === 1;
+    const p = typeof data.probability === "number" ? Math.round(data.probability * 100) : null;
+    result.className = "show";
+    result.innerHTML =
+      '<span class="badge ' + (fake ? "fake" : "real") + '">' +
+      (fake ? "Likely FAKE posting" : "Looks REAL") + "</span>" +
+      (p !== null
+        ? '<div class="bar"><span id="fill"></span></div><div>Fake hone ki probability: <b>' + p + "%</b></div>"
+        : "") +
+      '<p class="sub" style="margin-top:12px">Ye sirf model ka andaaza hai. Apply karne se pehle company ko khud verify zaroor karo.</p>';
+    if (p !== null) requestAnimationFrame(() => (document.getElementById("fill").style.width = p + "%"));
+  }
+</script>
+</body>
+</html>
